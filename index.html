@@ -565,9 +565,8 @@
           <td>
             <div style="display:flex; flex-wrap:wrap; gap:8px;">
               <button class="mini" data-action="plus1d4" data-id="${npc.id}">+1d4</button>
-              <button class="mini" data-action="minus1d4" data-id="${npc.id}">-1d4</button>
-              <button class="mini danger" data-action="minus2d4" data-id="${npc.id}">-2d4</button>
-              <button class="mini" data-action="set" data-id="${npc.id}">Set…</button>
+              <button class="mini danger" data-action="minus1d4" data-id="${npc.id}">-1d4</button>
+              <button class="mini" data-action="set" data-id="${npc.id}">Set</button>
             </div>
           </td>
 
@@ -711,10 +710,6 @@
       if (action === "minus1d4"){
         const r = rollDie(4);
         applyDelta(id, -r, "-1d4 (acted against alignment/bond)", `d4=${r}`);
-      }
-      if (action === "minus2d4"){
-        const r1 = rollDie(4), r2 = rollDie(4);
-        applyDelta(id, -(r1 + r2), "-2d4 (abused/misled/endangered selfishly)", `d4=${r1}+${r2}=${r1+r2}`);
       }
       if (action === "set"){
         setScore(id);
