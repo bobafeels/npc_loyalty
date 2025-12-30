@@ -312,6 +312,75 @@
       flex-wrap:wrap;
       margin-top: 12px;
     }
+  
+    /* --- In-page modal (Obsidian-friendly; no <dialog> / no window.prompt) --- */
+    .modalOverlay{
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(0,0,0,.55);
+      z-index: 9999;
+    }
+    .modalOverlay.open{ display:flex; }
+    .modal{
+      width: min(560px, 100%);
+      background: rgba(15,20,28,.96);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 18px 60px rgba(0,0,0,.45);
+      overflow: hidden;
+    }
+    .modalHeader{
+      display:flex;
+      align-items:flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 14px 10px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .modalTitle{
+      font-weight: 700;
+      color: var(--text);
+      font-size: 14px;
+      letter-spacing: .2px;
+      margin:0;
+    }
+    .modalHint{
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+    .modalClose{
+      appearance:none;
+      border:0;
+      background: transparent;
+      color: rgba(255,255,255,.78);
+      font-size: 18px;
+      line-height: 1;
+      padding: 6px 8px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .modalClose:hover{ background: rgba(255,255,255,.06); color: rgba(255,255,255,.92); }
+    .modalBody{
+      padding: 14px;
+    }
+    .modalGrid{
+      display:grid;
+      gap: 12px;
+    }
+    .modalActions{
+      display:flex;
+      gap: 10px;
+      justify-content: flex-end;
+      padding: 12px 14px 14px;
+      border-top: 1px solid rgba(255,255,255,.08);
+    }
+
   </style>
 </head>
 <body>
@@ -416,6 +485,30 @@
       </div>
     </section>
   </div>
+
+
+  <!-- In-page modal (works in Obsidian embeds) -->
+  <div class="modalOverlay" id="modalOverlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modalHeader">
+        <div>
+          <div class="modalTitle" id="modalTitle">Adjust Loyalty</div>
+          <div class="modalHint" id="modalSubtitle"></div>
+        </div>
+        <button class="modalClose" id="modalX" type="button" aria-label="Close">✕</button>
+      </div>
+
+      <div class="modalBody">
+        <div class="modalGrid" id="modalContent"><!-- injected --></div>
+      </div>
+
+      <div class="modalActions">
+        <button class="mini" id="modalCancel" type="button">Cancel</button>
+        <button class="mini" id="modalConfirm" type="button">Confirm</button>
+      </div>
+    </div>
+  </div>
+
 
   <script>
     // --- Storage keys ---
@@ -633,28 +726,7 @@
       render();
     }
 
-    function setScore(npcId){
-      const npc = state.npcs.find(n => n.id === npcId);
-      if (!npc) return;
-
-      const val = prompt(`Set loyalty for "${npc.name}" (0–${npc.max}):`, String(npc.score));
-      if (val === null) return;
-
-      const num = Number(val);
-      if (!Number.isFinite(num)) return;
-
-      const before = npc.score;
-      npc.score = clamp(Math.round(num), 0, Number(npc.max));
-      npc.lastChange = {
-        delta: npc.score - before,
-        reason: "Set manually",
-        rolled: "—",
-        at: Date.now()
-      };
-
-      save();
-      render();
-    }
+    function setScore(npcId){ openSetModal(npcId); }
 
     function removeNpc(npcId){
       const npc = state.npcs.find(n => n.id === npcId);
@@ -695,6 +767,159 @@
       document.querySelectorAll("tbody details").forEach(d => d.open = open);
     }
 
+    
+    // --- In-page modal (replaces window.prompt; works in Obsidian embeds) ---
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalSubtitle = document.getElementById("modalSubtitle");
+    const modalContent = document.getElementById("modalContent");
+    const modalCancel = document.getElementById("modalCancel");
+    const modalConfirm = document.getElementById("modalConfirm");
+    const modalX = document.getElementById("modalX");
+
+    let pendingModal = null; // { type, npcId, npcName, max, delta, rolled, label, defaultReason }
+
+    function openModal(payload){
+      pendingModal = payload;
+      modalOverlay.classList.add("open");
+      modalOverlay.setAttribute("aria-hidden", "false");
+
+      if (payload.type === "roll"){
+        modalTitle.textContent = `Log ${payload.label} for "${payload.npcName}"`;
+        modalSubtitle.textContent = `Rolled ${payload.rolled}. Add an optional note and apply the change.`;
+        modalContent.innerHTML = `
+          <div>
+            <label for="modalNote">Note (optional)</label>
+            <input id="modalNote" type="text" placeholder='e.g., "saved NPC from danger"' />
+          </div>
+        `;
+        modalConfirm.textContent = "Apply";
+        setTimeout(() => document.getElementById("modalNote")?.focus(), 0);
+        return;
+      }
+
+      if (payload.type === "set"){
+        modalTitle.textContent = `Set loyalty for "${payload.npcName}"`;
+        modalSubtitle.textContent = `Enter a value from 0 to ${payload.max}. Add an optional note for your log.`;
+        modalContent.innerHTML = `
+          <div>
+            <label for="modalSetValue">New loyalty (0–${payload.max})</label>
+            <input id="modalSetValue" type="number" min="0" max="${payload.max}" value="${payload.current}" />
+          </div>
+          <div>
+            <label for="modalNote">Note (optional)</label>
+            <input id="modalNote" type="text" placeholder='e.g., "rewarded with magic weapon"' />
+          </div>
+        `;
+        modalConfirm.textContent = "Set";
+        setTimeout(() => document.getElementById("modalSetValue")?.focus(), 0);
+        return;
+      }
+    }
+
+    function closeModal(){
+      pendingModal = null;
+      modalOverlay.classList.remove("open");
+      modalOverlay.setAttribute("aria-hidden", "true");
+      modalContent.innerHTML = "";
+      modalTitle.textContent = "Adjust Loyalty";
+      modalSubtitle.textContent = "";
+    }
+
+    modalCancel.addEventListener("click", closeModal);
+    modalX.addEventListener("click", closeModal);
+    modalOverlay.addEventListener("click", (e) => {
+      if (e.target === modalOverlay) closeModal();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (!modalOverlay.classList.contains("open")) return;
+      if (e.key === "Escape") closeModal();
+    });
+
+    function appendLogLine(npc, line){
+      const existing = (npc.notes || "").trim();
+      npc.notes = (line + (existing ? "\n" + existing : "")).trimEnd();
+    }
+
+    function openRollNoteModal(npcId, delta, label, rolled, defaultReason){
+      const npc = state.npcs.find(n => n.id === npcId);
+      if (!npc) return;
+      openModal({ type:"roll", npcId, npcName:npc.name, delta, label, rolled, defaultReason });
+    }
+
+    function openSetModal(npcId){
+      const npc = state.npcs.find(n => n.id === npcId);
+      if (!npc) return;
+      openModal({ type:"set", npcId, npcName:npc.name, max: Number(npc.max), current: Number(npc.score) });
+    }
+
+    modalConfirm.addEventListener("click", () => {
+      if (!pendingModal) return;
+
+      const note = (document.getElementById("modalNote")?.value || "").trim();
+
+      if (pendingModal.type === "roll"){
+        const npc = state.npcs.find(n => n.id === pendingModal.npcId);
+        if (!npc) { closeModal(); return; }
+
+        // Apply delta
+        const before = Number(npc.score);
+        const max = Number(npc.max);
+        npc.score = clamp(before + pendingModal.delta, 0, max);
+
+        // Log line (requested format)
+        if (note){
+          const signed = (pendingModal.delta > 0 ? "+" : "") + String(pendingModal.delta);
+          appendLogLine(npc, `${signed} ${note}`);
+        } else {
+          // still keep a minimal reason in lastChange even if no note
+        }
+
+        npc.lastChange = {
+          delta: npc.score - before,
+          reason: note || pendingModal.defaultReason,
+          rolled: `d4=${pendingModal.rolled}`,
+          at: Date.now()
+        };
+
+        save();
+        render();
+        closeModal();
+        return;
+      }
+
+      if (pendingModal.type === "set"){
+        const npc = state.npcs.find(n => n.id === pendingModal.npcId);
+        if (!npc) { closeModal(); return; }
+
+        const valRaw = document.getElementById("modalSetValue")?.value;
+        const num = Number(valRaw);
+        if (!Number.isFinite(num)) return; // keep modal open
+
+        const before = Number(npc.score);
+        npc.score = clamp(Math.round(num), 0, Number(npc.max));
+
+        if (note){
+          appendLogLine(npc, `Set ${npc.score} ${note}`);
+        } else {
+          appendLogLine(npc, `Set ${npc.score}`);
+        }
+
+        npc.lastChange = {
+          delta: npc.score - before,
+          reason: note ? `Set: ${note}` : "Set manually",
+          rolled: "—",
+          at: Date.now()
+        };
+
+        save();
+        render();
+        closeModal();
+        return;
+      }
+    });
+
+
     // --- Event delegation ---
     document.addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-action]");
@@ -705,14 +930,14 @@
 
       if (action === "plus1d4"){
         const r = rollDie(4);
-        applyDelta(id, +r, "+1d4 (helped / treated well / rescued)", `d4=${r}`);
+        openRollNoteModal(id, +r, "+1d4", r, "helped / treated well / rescued");
       }
       if (action === "minus1d4"){
         const r = rollDie(4);
-        applyDelta(id, -r, "-1d4 (acted against alignment/bond)", `d4=${r}`);
+        openRollNoteModal(id, -r, "-1d4", r, "acted against alignment/bond");
       }
       if (action === "set"){
-        setScore(id);
+        openSetModal(id);
       }
       if (action === "remove"){
         removeNpc(id);
