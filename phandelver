@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>NPC Loyalty Tracker</title>
+  <style>
+    :root{
+      --bg: #0b0f14;
+      --panel: rgba(255,255,255,.06);
+      --panel-2: rgba(255,255,255,.08);
+      --border: rgba(255,255,255,.12);
+      --text: rgba(255,255,255,.92);
+      --muted: rgba(255,255,255,.68);
+
+      --good: #4ade80;   /* soft green */
+      --warn: #fbbf24;   /* soft amber */
+      --bad:  #fb7185;   /* soft rose */
+      --info: #60a5fa;   /* soft blue */
+
+      --input-bg: rgba(255,255,255,.10);
+      --input-text: rgba(255,255,255,.92); /* FIX: force readable text */
+      --input-placeholder: rgba(255,255,255,.45);
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 16px;
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      background: radial-gradient(1200px 600px at 20% -10%, rgba(96,165,250,.18), transparent 55%),
+                  radial-gradient(900px 500px at 110% 10%, rgba(251,113,133,.14), transparent 50%),
+                  radial-gradient(900px 600px at 40% 110%, rgba(74,222,128,.10), transparent 55%),
+                  var(--bg);
+      color: var(--text);
+    }
+
+    .wrap{
+      max-width: 1100px;
+      margin: 28px auto 60px;
+      padding: 0 18px;
+    }
+
+    header{
+      display:flex;
+      flex-wrap:wrap;
+      gap:12px;
+      align-items:flex-end;
+      justify-content:space-between;
+      margin-bottom: 18px;
+    }
+
+    h1{
+      font-size: 20px;
+      margin: 0;
+      letter-spacing:.2px;
+    }
+    .sub{
+      margin-top:6px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+      max-width: 62ch;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap:14px;
+      margin-top: 12px;
+    }
+
+    @media (max-width: 900px){
+      .grid{ grid-template-columns: 1fr; }
+    }
+
+    .card{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 14px;
+    }
+
+    .card h2{
+      margin:0 0 10px;
+      font-size: 14px;
+      letter-spacing: .2px;
+      color: var(--text);
+    }
+
+    label{
+      display:block;
+      font-size: 12px;
+      color: var(--muted);
+      margin: 10px 0 6px;
+    }
+
+    input, textarea, select, button{
+      font: inherit;
+    }
+
+    /* FIX: ensure inputs never inherit white-on-white weirdness */
+    input, textarea, select{
+      width:100%;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      color: var(--input-text);
+      border-radius: 12px;
+      padding: 10px 12px;
+      outline: none;
+    }
+    input::placeholder, textarea::placeholder{
+      color: var(--input-placeholder);
+    }
+    input:focus, textarea:focus, select:focus{
+      border-color: rgba(96,165,250,.55);
+      box-shadow: 0 0 0 3px rgba(96,165,250,.18);
+    }
+
+    textarea{
+      min-height: 88px;
+      resize: vertical;
+    }
+
+    .row{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+    }
+
+    .btns{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      margin-top: 12px;
+      align-items:center;
+    }
+
+    button{
+      cursor:pointer;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      background: var(--panel-2);
+      color: var(--text);
+      transition: transform .05s ease, background .2s ease, border-color .2s ease;
+    }
+    button:hover{
+      background: rgba(255,255,255,.12);
+      border-color: rgba(255,255,255,.18);
+    }
+    button:active{ transform: translateY(1px); }
+
+    .primary{
+      background: rgba(96,165,250,.18);
+      border-color: rgba(96,165,250,.40);
+    }
+    .primary:hover{
+      background: rgba(96,165,250,.24);
+      border-color: rgba(96,165,250,.55);
+    }
+
+    .danger{
+      background: rgba(251,113,133,.16);
+      border-color: rgba(251,113,133,.40);
+    }
+
+    .mini{
+      padding: 7px 10px;
+      font-size: 12px;
+      border-radius: 10px;
+    }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.06);
+      color: var(--muted);
+      font-size: 12px;
+      white-space:nowrap;
+    }
+
+    .pill strong{
+      color: var(--text);
+      font-weight: 650;
+    }
+
+    .status{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.06);
+      white-space:nowrap;
+    }
+    .dot{
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      box-shadow: 0 0 0 4px rgba(255,255,255,.06);
+    }
+    .status.good .dot{ background: var(--good); box-shadow: 0 0 0 4px rgba(74,222,128,.12); }
+    .status.warn .dot{ background: var(--warn); box-shadow: 0 0 0 4px rgba(251,191,36,.14); }
+    .status.bad  .dot{ background: var(--bad);  box-shadow: 0 0 0 4px rgba(251,113,133,.12); }
+
+    .tableWrap{
+      margin-top: 14px;
+      overflow:hidden;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.04);
+    }
+
+    table{
+      width:100%;
+      border-collapse: collapse;
+    }
+    thead th{
+      text-align:left;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+      padding: 12px 12px;
+      background: rgba(255,255,255,.06);
+      border-bottom: 1px solid var(--border);
+    }
+    tbody td{
+      padding: 12px 12px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      vertical-align: top;
+    }
+    tbody tr:last-child td{ border-bottom:none; }
+
+    .nameCell{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+
+    .progress{
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.10);
+      overflow:hidden;
+    }
+    .bar{
+      height:100%;
+      width: 0%;
+      background: rgba(96,165,250,.55);
+    }
+    .bar.good{ background: rgba(74,222,128,.55); }
+    .bar.warn{ background: rgba(251,191,36,.60); }
+    .bar.bad{  background: rgba(251,113,133,.55); }
+
+    details{
+      margin-top: 8px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.04);
+      border-radius: 12px;
+      padding: 10px 10px 8px;
+    }
+    summary{
+      cursor:pointer;
+      color: var(--muted);
+      font-size: 12px;
+      user-select:none;
+      list-style:none;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    summary::-webkit-details-marker{ display:none; }
+    summary:before{
+      content:"▸";
+      opacity:.8;
+      transform: translateY(-.5px);
+    }
+    details[open] summary:before{ content:"▾"; }
+
+    .noteArea{
+      margin-top: 10px;
+    }
+
+    .muted{
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .rightAlign{
+      text-align:right;
+    }
+
+    .rowTint-good{ background: rgba(74,222,128,.04); }
+    .rowTint-warn{ background: rgba(251,191,36,.04); }
+    .rowTint-bad { background: rgba(251,113,133,.04); }
+
+    .footerBtns{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top: 12px;
+    }
+  
+    /* --- In-page modal (Obsidian-friendly; no <dialog> / no window.prompt) --- */
+    .modalOverlay{
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(0,0,0,.55);
+      z-index: 9999;
+    }
+    .modalOverlay.open{ display:flex; }
+    .modal{
+      width: min(560px, 100%);
+      background: rgba(15,20,28,.96);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 18px 60px rgba(0,0,0,.45);
+      overflow: hidden;
+    }
+    .modalHeader{
+      display:flex;
+      align-items:flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 14px 10px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .modalTitle{
+      font-weight: 700;
+      color: var(--text);
+      font-size: 14px;
+      letter-spacing: .2px;
+      margin:0;
+    }
+    .modalHint{
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+    .modalClose{
+      appearance:none;
+      border:0;
+      background: transparent;
+      color: rgba(255,255,255,.78);
+      font-size: 18px;
+      line-height: 1;
+      padding: 6px 8px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .modalClose:hover{ background: rgba(255,255,255,.06); color: rgba(255,255,255,.92); }
+    .modalBody{
+      padding: 14px;
+    }
+    .modalGrid{
+      display:grid;
+      gap: 12px;
+    }
+    .modalActions{
+      display:flex;
+      gap: 10px;
+      justify-content: flex-end;
+      padding: 12px 14px 14px;
+      border-top: 1px solid rgba(255,255,255,.08);
+    }
+
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>NPC Loyalty Tracker</h1>
+        <div class="sub">
+          Track loyalty privately. Quick buttons roll changes, clamp to 0…max, and status updates automatically.
+        </div>
+      </div>
+      <div class="pill" id="partySummary">
+        <span>Max Loyalty:</span> <strong id="maxLoyaltyDisplay">—</strong>
+        <span>• Start Loyalty:</span> <strong id="startLoyaltyDisplay">—</strong>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Party Settings</h2>
+
+        <div class="row">
+          <div>
+            <label for="highestCha">Highest PC Charisma</label>
+            <input id="highestCha" type="number" min="1" max="30" placeholder="e.g., 18" />
+          </div>
+          <div>
+            <label for="defaultName">Default NPC Label</label>
+            <input id="defaultName" type="text" placeholder="e.g., “Unnamed Contact”" />
+          </div>
+        </div>
+
+        <div class="btns">
+          <button class="primary" id="saveSettings">Save Settings</button>
+          <button class="danger" id="resetAll">Reset Everything</button>
+          <span class="muted">Reset clears all NPCs + settings on this device.</span>
+        </div>
+
+        <hr style="border:none;border-top:1px solid rgba(255,255,255,.10); margin:14px 0;">
+
+        <h2>Add NPC</h2>
+        <div class="row">
+          <div>
+            <label for="npcName">Name</label>
+            <input id="npcName" type="text" placeholder="e.g., Sildar Hallwinter" />
+          </div>
+          <div>
+            <label for="npcMaxOverride">Max Loyalty (optional override)</label>
+            <input id="npcMaxOverride" type="number" min="1" max="30" placeholder="Leave blank to use party max" />
+          </div>
+        </div>
+
+        <label for="npcNotes">Notes (private)</label>
+        <textarea id="npcNotes" placeholder="Bond, goals, alignment pressure points, leverage, etc."></textarea>
+
+        <div class="btns">
+          <button class="primary" id="addNpc">Add NPC</button>
+          <span class="muted">Starts at half max (rounded down).</span>
+        </div>
+      </section>
+
+      <aside class="card">
+        <h2>Quick Rules (DM-facing)</h2>
+        <div class="muted">
+          <p><strong>Loyalty range:</strong> 0–20 (or your party max). Starting loyalty is half max.</p>
+          <p><strong>+1d4</strong> if helped toward bond-goal, treated well, or rescued. Never above max.</p>
+          <p><strong>-1d4</strong> if party acts against alignment/bond.</p>
+          <p><strong>-2d4</strong> if abused/misled/endangered selfishly.</p>
+          <p><strong>11+</strong> loyal • <strong>1–10</strong> tenuous • <strong>0</strong> disloyal.</p>
+        </div>
+      </aside>
+    </div>
+
+    <section class="card" style="margin-top:14px;">
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+        <h2 style="margin:0;">NPC Snapshot</h2>
+        <div class="pill">
+          <span>Total NPCs:</span> <strong id="npcCount">0</strong>
+        </div>
+      </div>
+
+      <div class="tableWrap" style="margin-top:12px;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 28%;">NPC</th>
+              <th style="width: 22%;">Loyalty</th>
+              <th style="width: 18%;">Status</th>
+              <th>Quick Adjust</th>
+              <th style="width: 12%;" class="rightAlign">Manage</th>
+            </tr>
+          </thead>
+          <tbody id="npcTableBody">
+            <!-- rows injected -->
+          </tbody>
+        </table>
+      </div>
+
+      <div class="footerBtns">
+        <button class="mini" id="collapseAll">Collapse Notes</button>
+        <button class="mini" id="expandAll">Expand Notes</button>
+      </div>
+    </section>
+  </div>
+
+
+  <!-- In-page modal (works in Obsidian embeds) -->
+  <div class="modalOverlay" id="modalOverlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modalHeader">
+        <div>
+          <div class="modalTitle" id="modalTitle">Adjust Loyalty</div>
+          <div class="modalHint" id="modalSubtitle"></div>
+        </div>
+        <button class="modalClose" id="modalX" type="button" aria-label="Close">✕</button>
+      </div>
+
+      <div class="modalBody">
+        <div class="modalGrid" id="modalContent"><!-- injected --></div>
+      </div>
+
+      <div class="modalActions">
+        <button class="mini" id="modalCancel" type="button">Cancel</button>
+        <button class="mini" id="modalConfirm" type="button">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+
+  <script>
+    // --- Storage keys ---
+    const KEY = "npc_loyalty_tracker_v2";
+
+    // --- Utilities ---
+    const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+    const rollDie = (sides) => Math.floor(Math.random() * sides) + 1;
+
+    function statusFor(score){
+      if (score <= 0) return { label: "Disloyal (0)", tone: "bad" };
+      if (score >= 11) return { label: "Loyal (11+)", tone: "good" };
+      return { label: "Tenuous (1–10)", tone: "warn" };
+    }
+
+    function rowTintClass(tone){
+      if (tone === "good") return "rowTint-good";
+      if (tone === "warn") return "rowTint-warn";
+      return "rowTint-bad";
+    }
+
+    // --- State ---
+    let state = {
+      settings: {
+        highestCha: 18,
+        defaultName: "Unnamed Contact"
+      },
+      npcs: []
+      // npc shape:
+      // { id, name, max, score, notes, createdAt, lastChange: {delta, reason, rolled, at} }
+    };
+
+    function load(){
+      try{
+        const raw = localStorage.getItem(KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object"){
+          state = {
+            settings: {
+              highestCha: Number(parsed.settings?.highestCha ?? 18),
+              defaultName: String(parsed.settings?.defaultName ?? "Unnamed Contact")
+            },
+            npcs: Array.isArray(parsed.npcs) ? parsed.npcs : []
+          };
+        }
+      }catch(e){
+        console.warn("Load failed:", e);
+      }
+    }
+
+    function save(){
+      localStorage.setItem(KEY, JSON.stringify(state));
+    }
+
+    function partyMax(){
+      // Per your rule: max loyalty = highest Charisma score among PCs
+      // still respecting the 0–20 framing by default; you can remove the 20 clamp if you want.
+      const cha = Number(state.settings.highestCha || 0);
+      return clamp(cha, 1, 20);
+    }
+
+    function startLoyaltyForMax(max){
+      return Math.floor(max / 2);
+    }
+
+    function updateHeader(){
+      const max = partyMax();
+      document.getElementById("maxLoyaltyDisplay").textContent = max;
+      document.getElementById("startLoyaltyDisplay").textContent = startLoyaltyForMax(max);
+      document.getElementById("npcCount").textContent = state.npcs.length;
+
+      // inputs
+      document.getElementById("highestCha").value = state.settings.highestCha ?? "";
+      document.getElementById("defaultName").value = state.settings.defaultName ?? "";
+    }
+
+    function render(){
+      updateHeader();
+      const tbody = document.getElementById("npcTableBody");
+      tbody.innerHTML = "";
+
+      if (state.npcs.length === 0){
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td colspan="5" style="padding:16px 12px; color: rgba(255,255,255,.65);">
+            No NPCs yet. Add one above to start tracking.
+          </td>
+        `;
+        tbody.appendChild(tr);
+        return;
+      }
+
+      for (const npc of state.npcs){
+        const stat = statusFor(npc.score);
+        const max = Number(npc.max);
+        const pct = max > 0 ? clamp((npc.score / max) * 100, 0, 100) : 0;
+
+        const tr = document.createElement("tr");
+        tr.className = rowTintClass(stat.tone);
+
+        tr.innerHTML = `
+          <td>
+            <div class="nameCell">
+              <div style="display:flex; gap:10px; align-items:center; justify-content:space-between;">
+                <div style="font-weight:700;">${escapeHtml(npc.name)}</div>
+                <span class="pill" title="Max loyalty for this NPC">Max: <strong>${max}</strong></span>
+              </div>
+              <div class="progress" title="${npc.score} / ${max}">
+                <div class="bar ${stat.tone}" style="width:${pct}%;"></div>
+              </div>
+
+              <details>
+                <summary>Notes & log</summary>
+                <div class="noteArea">
+                  <label style="margin:0 0 6px;">Notes</label>
+                  <textarea data-action="notes" data-id="${npc.id}" placeholder="Private notes...">${escapeTextarea(npc.notes || "")}</textarea>
+
+                  <div style="margin-top:10px;" class="muted">
+                    ${npc.lastChange
+                      ? `Last change: <strong style="color:rgba(255,255,255,.9)">${npc.lastChange.delta > 0 ? "+" : ""}${npc.lastChange.delta}</strong>
+                         (${npc.lastChange.reason}, rolled ${npc.lastChange.rolled}) • ${new Date(npc.lastChange.at).toLocaleString()}`
+                      : `No changes logged yet.`
+                    }
+                  </div>
+                </div>
+              </details>
+            </div>
+          </td>
+
+          <td>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <div style="font-size:14px;">
+                <strong>${npc.score}</strong> <span style="color:rgba(255,255,255,.65)">/ ${max}</span>
+              </div>
+              <div class="muted">Started at ${startLoyaltyForMax(max)}.</div>
+            </div>
+          </td>
+
+          <td>
+            <span class="status ${stat.tone}">
+              <span class="dot"></span>
+              <span>${stat.label}</span>
+            </span>
+          </td>
+
+          <td>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+              <button class="mini" data-action="plus1d4" data-id="${npc.id}">+1d4</button>
+              <button class="mini danger" data-action="minus1d4" data-id="${npc.id}">-1d4</button>
+              <button class="mini" data-action="set" data-id="${npc.id}">Set</button>
+            </div>
+          </td>
+
+          <td class="rightAlign">
+            <button class="mini danger" data-action="remove" data-id="${npc.id}">Remove</button>
+          </td>
+        `;
+
+        tbody.appendChild(tr);
+      }
+    }
+
+    function addNpc(){
+      const nameInput = document.getElementById("npcName");
+      const maxOverrideInput = document.getElementById("npcMaxOverride");
+      const notesInput = document.getElementById("npcNotes");
+
+      const rawName = (nameInput.value || "").trim();
+      const name = rawName || state.settings.defaultName || "Unnamed Contact";
+
+      const partyMaxVal = partyMax();
+      const override = (maxOverrideInput.value || "").trim();
+      const max = clamp(override ? Number(override) : partyMaxVal, 1, 20);
+
+      const score = startLoyaltyForMax(max);
+      const notes = notesInput.value || "";
+
+      const npc = {
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + "_" + Math.random().toString(16).slice(2),
+        name,
+        max,
+        score,
+        notes,
+        createdAt: Date.now(),
+        lastChange: null
+      };
+
+      state.npcs.unshift(npc);
+      save();
+      render();
+
+      // clear add form (keep settings)
+      nameInput.value = "";
+      maxOverrideInput.value = "";
+      notesInput.value = "";
+    }
+
+    function applyDelta(npcId, delta, reason, rolled){
+      const npc = state.npcs.find(n => n.id === npcId);
+      if (!npc) return;
+
+      const before = Number(npc.score);
+      const max = Number(npc.max);
+
+      npc.score = clamp(before + delta, 0, max);
+      npc.lastChange = {
+        delta: npc.score - before,
+        reason,
+        rolled,
+        at: Date.now()
+      };
+
+      save();
+      render();
+    }
+
+    function setScore(npcId){ openSetModal(npcId); }
+
+    function removeNpc(npcId){
+      const npc = state.npcs.find(n => n.id === npcId);
+      if (!npc) return;
+      const ok = confirm(`Remove "${npc.name}" from the tracker?`);
+      if (!ok) return;
+
+      state.npcs = state.npcs.filter(n => n.id !== npcId);
+      save();
+      render();
+    }
+
+    function saveSettings(){
+      const highestCha = Number(document.getElementById("highestCha").value || 0);
+      const defaultName = (document.getElementById("defaultName").value || "").trim();
+
+      // keep within sane bounds; partyMax clamps again
+      state.settings.highestCha = clamp(highestCha || 1, 1, 30);
+      state.settings.defaultName = defaultName || "Unnamed Contact";
+
+      // NOTE: existing NPC max values are not auto-updated, to avoid unintended changes.
+      save();
+      render();
+    }
+
+    function resetAll(){
+      const ok = confirm("This will delete ALL NPCs and settings from this device. Continue?");
+      if (!ok) return;
+      localStorage.removeItem(KEY);
+      state = {
+        settings: { highestCha: 18, defaultName: "Unnamed Contact" },
+        npcs: []
+      };
+      render();
+    }
+
+    function collapseExpandAll(open){
+      document.querySelectorAll("tbody details").forEach(d => d.open = open);
+    }
+
+    
+    // --- In-page modal (replaces window.prompt; works in Obsidian embeds) ---
+    const modalOverlay = document.getElementById("modalOverlay");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalSubtitle = document.getElementById("modalSubtitle");
+    const modalContent = document.getElementById("modalContent");
+    const modalCancel = document.getElementById("modalCancel");
+    const modalConfirm = document.getElementById("modalConfirm");
+    const modalX = document.getElementById("modalX");
+
+    let pendingModal = null; // { type, npcId, npcName, max, delta, rolled, label, defaultReason }
+
+    function openModal(payload){
+      pendingModal = payload;
+      modalOverlay.classList.add("open");
+      modalOverlay.setAttribute("aria-hidden", "false");
+
+      if (payload.type === "roll"){
+        modalTitle.textContent = `Log ${payload.label} for "${payload.npcName}"`;
+        modalSubtitle.textContent = `Rolled ${payload.rolled}. Add an optional note and apply the change.`;
+        modalContent.innerHTML = `
+          <div>
+            <label for="modalNote">Note (optional)</label>
+            <input id="modalNote" type="text" placeholder='e.g., "saved NPC from danger"' />
+          </div>
+        `;
+        modalConfirm.textContent = "Apply";
+        setTimeout(() => document.getElementById("modalNote")?.focus(), 0);
+        return;
+      }
+
+      if (payload.type === "set"){
+        modalTitle.textContent = `Set loyalty for "${payload.npcName}"`;
+        modalSubtitle.textContent = `Enter a value from 0 to ${payload.max}. Add an optional note for your log.`;
+        modalContent.innerHTML = `
+          <div>
+            <label for="modalSetValue">New loyalty (0–${payload.max})</label>
+            <input id="modalSetValue" type="number" min="0" max="${payload.max}" value="${payload.current}" />
+          </div>
+          <div>
+            <label for="modalNote">Note (optional)</label>
+            <input id="modalNote" type="text" placeholder='e.g., "rewarded with magic weapon"' />
+          </div>
+        `;
+        modalConfirm.textContent = "Set";
+        setTimeout(() => document.getElementById("modalSetValue")?.focus(), 0);
+        return;
+      }
+    }
+
+    function closeModal(){
+      pendingModal = null;
+      modalOverlay.classList.remove("open");
+      modalOverlay.setAttribute("aria-hidden", "true");
+      modalContent.innerHTML = "";
+      modalTitle.textContent = "Adjust Loyalty";
+      modalSubtitle.textContent = "";
+    }
+
+    modalCancel.addEventListener("click", closeModal);
+    modalX.addEventListener("click", closeModal);
+    modalOverlay.addEventListener("click", (e) => {
+      if (e.target === modalOverlay) closeModal();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (!modalOverlay.classList.contains("open")) return;
+      if (e.key === "Escape") closeModal();
+    });
+
+    function appendLogLine(npc, line){
+      const existing = (npc.notes || "").trim();
+      npc.notes = (line + (existing ? "\n" + existing : "")).trimEnd();
+    }
+
+    function openRollNoteModal(npcId, delta, label, rolled, defaultReason){
+      const npc = state.npcs.find(n => n.id === npcId);
+      if (!npc) return;
+      openModal({ type:"roll", npcId, npcName:npc.name, delta, label, rolled, defaultReason });
+    }
+
+    function openSetModal(npcId){
+      const npc = state.npcs.find(n => n.id === npcId);
+      if (!npc) return;
+      openModal({ type:"set", npcId, npcName:npc.name, max: Number(npc.max), current: Number(npc.score) });
+    }
+
+    modalConfirm.addEventListener("click", () => {
+      if (!pendingModal) return;
+
+      const note = (document.getElementById("modalNote")?.value || "").trim();
+
+      if (pendingModal.type === "roll"){
+        const npc = state.npcs.find(n => n.id === pendingModal.npcId);
+        if (!npc) { closeModal(); return; }
+
+        // Apply delta
+        const before = Number(npc.score);
+        const max = Number(npc.max);
+        npc.score = clamp(before + pendingModal.delta, 0, max);
+
+        // Log line (requested format)
+        if (note){
+          const signed = (pendingModal.delta > 0 ? "+" : "") + String(pendingModal.delta);
+          appendLogLine(npc, `${signed} ${note}`);
+        } else {
+          // still keep a minimal reason in lastChange even if no note
+        }
+
+        npc.lastChange = {
+          delta: npc.score - before,
+          reason: note || pendingModal.defaultReason,
+          rolled: `d4=${pendingModal.rolled}`,
+          at: Date.now()
+        };
+
+        save();
+        render();
+        closeModal();
+        return;
+      }
+
+      if (pendingModal.type === "set"){
+        const npc = state.npcs.find(n => n.id === pendingModal.npcId);
+        if (!npc) { closeModal(); return; }
+
+        const valRaw = document.getElementById("modalSetValue")?.value;
+        const num = Number(valRaw);
+        if (!Number.isFinite(num)) return; // keep modal open
+
+        const before = Number(npc.score);
+        npc.score = clamp(Math.round(num), 0, Number(npc.max));
+
+        if (note){
+          appendLogLine(npc, `Set ${npc.score} ${note}`);
+        } else {
+          appendLogLine(npc, `Set ${npc.score}`);
+        }
+
+        npc.lastChange = {
+          delta: npc.score - before,
+          reason: note ? `Set: ${note}` : "Set manually",
+          rolled: "—",
+          at: Date.now()
+        };
+
+        save();
+        render();
+        closeModal();
+        return;
+      }
+    });
+
+
+    // --- Event delegation ---
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-action]");
+      if (!btn) return;
+
+      const action = btn.dataset.action;
+      const id = btn.dataset.id;
+
+      if (action === "plus1d4"){
+        const r = rollDie(4);
+        openRollNoteModal(id, +r, "+1d4", r, "helped / treated well / rescued");
+      }
+      if (action === "minus1d4"){
+        const r = rollDie(4);
+        openRollNoteModal(id, -r, "-1d4", r, "acted against alignment/bond");
+      }
+      if (action === "set"){
+        openSetModal(id);
+      }
+      if (action === "remove"){
+        removeNpc(id);
+      }
+    });
+
+    document.addEventListener("input", (e) => {
+      const ta = e.target.closest("textarea[data-action='notes']");
+      if (!ta) return;
+      const id = ta.dataset.id;
+      const npc = state.npcs.find(n => n.id === id);
+      if (!npc) return;
+      npc.notes = ta.value;
+      save();
+    });
+
+    // --- Top-level buttons ---
+    document.getElementById("addNpc").addEventListener("click", addNpc);
+    document.getElementById("saveSettings").addEventListener("click", saveSettings);
+    document.getElementById("resetAll").addEventListener("click", resetAll);
+    document.getElementById("collapseAll").addEventListener("click", () => collapseExpandAll(false));
+    document.getElementById("expandAll").addEventListener("click", () => collapseExpandAll(true));
+
+    // Enter key to add NPC when focused in name field
+    document.getElementById("npcName").addEventListener("keydown", (e) => {
+      if (e.key === "Enter"){
+        e.preventDefault();
+        addNpc();
+      }
+    });
+
+    // --- HTML escaping helpers ---
+    function escapeHtml(str){
+      return String(str)
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+    }
+    function escapeTextarea(str){
+      // textarea content isn't interpreted as HTML in the same way, but keep it safe
+      return String(str).replaceAll("</textarea", "&lt;/textarea");
+    }
+
+    // --- Boot ---
+    load();
+    render();
+  </script>
+</body>
+</html>
