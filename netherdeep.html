@@ -543,7 +543,7 @@
 
     function load(){
       try{
-        const raw = localStorage.getItem("npc-loyalty-tracker-netherdeep);
+        const raw = localStorage.getItem("npc-loyalty-tracker-netherdeep");
         if (!raw) return;
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === "object"){
