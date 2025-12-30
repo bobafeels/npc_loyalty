@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NPC Loyalty Tracker</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 20px; line-height: 1.25; }
+    h1 { margin: 0 0 10px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 12px; margin: 12px 0; }
+    label { display: block; font-size: 12px; color: #444; margin-bottom: 4px; }
+    input, textarea, button, select { font: inherit; }
+    input, textarea, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 10px; }
+    textarea { min-height: 64px; resize: vertical; }
+    button { padding: 8px 10px; border: 1px solid #bbb; border-radius: 10px; background: #f7f7f7; cursor: pointer; }
+    button:hover { background: #efefef; }
+    .danger { border-color: #d0a0a0; }
+    .ok { border-color: #a0d0a0; }
+    .muted { color: #666; font-size: 12px; }
+    .grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 12px; }
+    .pill { display: inline-block; padding: 4px 8px; border-radius: 999px; border: 1px solid #ccc; font-size: 12px; }
+    .pill.zero { border-color: #d0a0a0; }
+    .pill.tenuous { border-color: #d0c5a0; }
+    .pill.loyal { border-color: #a0d0a0; }
+    .small { width: 160px; }
+    .right { margin-left: auto; }
+    .toolbar { display:flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+    .hr { height: 1px; background: #eee; margin: 14px 0; }
+    details summary { cursor: pointer; }
+    code { background:#f5f5f5; padding:2px 6px; border-radius:6px; }
+  </style>
+</head>
+<body>
+  <h1>NPC Loyalty Tracker</h1>
+  <div class="muted">
+    Rules baked in: loyalty 0–20, max = highest PC CHA, start = half max (rounded down), event rolls ±1d4 / −2d4, clamp 0..max.
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div class="small">
+        <label>Highest PC Charisma</label>
+        <input id="partyMaxCha" type="number" min="1" max="30" value="16" />
+      </div>
+      <div class="small">
+        <label>Computed NPC Max Loyalty</label>
+        <input id="computedMax" type="number" readonly />
+      </div>
+      <div class="small">
+        <label>Computed Starting Loyalty</label>
+        <input id="computedStart" type="number" readonly />
+      </div>
+      <button class="right" id="applyPartyToAll">Apply Max/Start to all NPCs</button>
+    </div>
+    <div class="muted" style="margin-top:8px;">
+      Max Loyalty = Highest PC CHA (capped to 20 by your 0–20 scale). Starting = floor(max/2).
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 10px;">Add NPC</h3>
+    <div class="grid">
+      <div>
+        <label>Name</label>
+        <input id="newName" placeholder="e.g., Sildar Hallwinter" />
+      </div>
+      <div>
+        <label>Max Loyalty (blank = computed)</label>
+        <input id="newMax" type="number" min="0" max="20" placeholder="auto" />
+      </div>
+      <div>
+        <label>Starting Loyalty (blank = computed)</label>
+        <input id="newStart" type="number" min="0" max="20" placeholder="auto" />
+      </div>
+    </div>
+    <div style="margin-top:10px;">
+      <label>Bond / Notes (DM only)</label>
+      <textarea id="newNotes" placeholder="Bond, alignment pressure points, what they want, what offends them..."></textarea>
+    </div>
+    <div class="toolbar">
+      <button id="addNpc">Add</button>
+      <button id="clearAll" title="Deletes all NPCs">Clear All</button>
+      <button id="exportJson">Export JSON</button>
+      <button id="importJson">Import JSON</button>
+      <input id="importFile" type="file" accept="application/json" style="display:none;" />
+      <span class="muted">Data saves locally in this browser.</span>
+    </div>
+  </div>
+
+  <div id="list"></div>
+
+  <details class="card">
+    <summary><strong>Embedding & secrecy notes</strong></summary>
+    <div class="hr"></div>
+    <div class="muted">
+      • If you host this on GitHub Pages, you can embed it into a DM-only site page via an <code>&lt;iframe&gt;</code>.<br/>
+      • The data is stored in <strong>your browser’s localStorage</strong> — if players open the same page on their devices, they won’t see your saved NPCs, but if they use <em>your</em> machine/profile they could.<br/>
+      • For true secrecy, keep it in a DM-only browser profile or a password-protected DM hub.
+    </div>
+  </details>
+
+<script>
+  const STORAGE_KEY = "npc_loyalty_tracker_v1";
+
+  function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+  function d4(){ return Math.floor(Math.random()*4)+1; }
+
+  function computePartyMax(){
+    const raw = parseInt(document.getElementById("partyMaxCha").value || "0", 10);
+    const maxLoyalty = clamp(raw, 0, 20); // your scale is 0–20
+    const start = Math.floor(maxLoyalty / 2);
+    document.getElementById("computedMax").value = maxLoyalty;
+    document.getElementById("computedStart").value = start;
+    return { maxLoyalty, start };
+  }
+
+  function load(){
+    try{
+      const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      return Array.isArray(data) ? data : [];
+    }catch(e){ return []; }
+  }
+  function save(list){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  }
+
+  let npcs = load();
+
+  function band(loyalty){
+    if (loyalty <= 0) return { label: "Disloyal (0): may leave / sabotage", cls: "zero" };
+    if (loyalty < 10) return { label: "Tenuous (1–9): uncertain", cls: "tenuous" };
+    return { label: "Loyal (10+): risks life & limb", cls: "loyal" };
+  }
+
+  function render(){
+    const container = document.getElementById("list");
+    container.innerHTML = "";
+
+    if(npcs.length === 0){
+      const empty = document.createElement("div");
+      empty.className = "muted";
+      empty.style.marginTop = "10px";
+      empty.textContent = "No NPCs yet. Add one above.";
+      container.appendChild(empty);
+      return;
+    }
+
+    npcs.forEach((npc, idx) => {
+      const b = band(npc.loyalty);
+
+      const card = document.createElement("div");
+      card.className = "card " + (npc.loyalty <= 0 ? "danger" : (npc.loyalty >= 10 ? "ok" : ""));
+      const titleRow = document.createElement("div");
+      titleRow.className = "row";
+      titleRow.innerHTML = `
+        <div style="flex:1;">
+          <div style="font-size:18px; font-weight:700;">${escapeHtml(npc.name)}</div>
+          <div class="muted">Max: ${npc.max} • Current: <strong>${npc.loyalty}</strong></div>
+        </div>
+        <span class="pill ${b.cls}">${b.label}</span>
+      `;
+      card.appendChild(titleRow);
+
+      const notes = document.createElement("div");
+      notes.style.marginTop = "10px";
+      notes.innerHTML = `
+        <label>Bond / Notes</label>
+        <textarea data-idx="${idx}" class="notes">${escapeHtml(npc.notes || "")}</textarea>
+      `;
+      card.appendChild(notes);
+
+      const actions = document.createElement("div");
+      actions.className = "toolbar";
+      actions.style.marginTop = "10px";
+      actions.innerHTML = `
+        <button data-idx="${idx}" data-act="plus1">+1d4 (helped goal / treated well / rescued)</button>
+        <button data-idx="${idx}" data-act="minus1">−1d4 (against bond/alignment)</button>
+        <button data-idx="${idx}" data-act="minus2">−2d4 (abused/misled/endangered)</button>
+        <button data-idx="${idx}" data-act="set">Set…</button>
+        <button data-idx="${idx}" data-act="delete">Delete</button>
+        <span class="muted" id="log-${idx}"></span>
+      `;
+      card.appendChild(actions);
+
+      container.appendChild(card);
+    });
+
+    // wire note saves
+    document.querySelectorAll("textarea.notes").forEach(t => {
+      t.addEventListener("change", (e) => {
+        const i = parseInt(e.target.getAttribute("data-idx"), 10);
+        npcs[i].notes = e.target.value;
+        save(npcs);
+      });
+    });
+
+    // wire buttons
+    container.querySelectorAll("button[data-act]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const i = parseInt(btn.getAttribute("data-idx"), 10);
+        const act = btn.getAttribute("data-act");
+        const log = document.getElementById(`log-${i}`);
+
+        if(act === "delete"){
+          npcs.splice(i,1);
+          save(npcs);
+          render();
+          return;
+        }
+
+        if(act === "set"){
+          const val = prompt(`Set loyalty for ${npcs[i].name} (0–${npcs[i].max}):`, String(npcs[i].loyalty));
+          if(val === null) return;
+          const n = clamp(parseInt(val,10) || 0, 0, npcs[i].max);
+          npcs[i].loyalty = n;
+          save(npcs);
+          render();
+          return;
+        }
+
+        let roll = 0;
+        if(act === "plus1") roll = d4();
+        if(act === "minus1") roll = -d4();
+        if(act === "minus2") roll = -(d4()+d4());
+
+        const before = npcs[i].loyalty;
+        npcs[i].loyalty = clamp(before + roll, 0, npcs[i].max);
+
+        save(npcs);
+        render();
+        // after re-render, logs reset; re-grab new log slot
+        const newLog = document.getElementById(`log-${i}`);
+        if(newLog){
+          const sign = roll >= 0 ? "+" : "";
+          newLog.textContent = `Applied ${sign}${roll} (from ${before} → ${npcs[i].loyalty})`;
+        }
+      });
+    });
+  }
+
+  function escapeHtml(str){
+    return String(str)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+
+  // controls
+  document.getElementById("partyMaxCha").addEventListener("change", computePartyMax);
+
+  document.getElementById("addNpc").addEventListener("click", () => {
+    const name = document.getElementById("newName").value.trim();
+    if(!name){ alert("Give the NPC a name."); return; }
+
+    const { maxLoyalty, start } = computePartyMax();
+
+    const maxRaw = document.getElementById("newMax").value.trim();
+    const startRaw = document.getElementById("newStart").value.trim();
+    const notes = document.getElementById("newNotes").value;
+
+    const max = clamp(maxRaw ? parseInt(maxRaw,10) : maxLoyalty, 0, 20);
+    const loyalty = clamp(startRaw ? parseInt(startRaw,10) : start, 0, max);
+
+    npcs.unshift({ name, max, loyalty, notes });
+    save(npcs);
+
+    document.getElementById("newName").value = "";
+    document.getElementById("newMax").value = "";
+    document.getElementById("newStart").value = "";
+    document.getElementById("newNotes").value = "";
+
+    render();
+  });
+
+  document.getElementById("applyPartyToAll").addEventListener("click", () => {
+    const { maxLoyalty, start } = computePartyMax();
+    npcs = npcs.map(n => {
+      const newMax = maxLoyalty;
+      const newLoyalty = clamp(n.loyalty, 0, newMax);
+      // If you prefer “reset everyone to starting,” swap newLoyalty for start.
+      return { ...n, max: newMax, loyalty: newLoyalty };
+    });
+    save(npcs);
+    render();
+  });
+
+  document.getElementById("clearAll").addEventListener("click", () => {
+    if(confirm("Delete all NPCs?")) {
+      npcs = [];
+      save(npcs);
+      render();
+    }
+  });
+
+  document.getElementById("exportJson").addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(npcs, null, 2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "npc-loyalty.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById("importJson").addEventListener("click", () => {
+    document.getElementById("importFile").click();
+  });
+
+  document.getElementById("importFile").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const text = await file.text();
+    try{
+      const data = JSON.parse(text);
+      if(!Array.isArray(data)) throw new Error("Not an array");
+      npcs = data.map(n => ({
+        name: String(n.name || "Unnamed"),
+        max: clamp(parseInt(n.max,10) || 0, 0, 20),
+        loyalty: 0,
+        notes: String(n.notes || "")
+      })).map(n => ({...n, loyalty: clamp(parseInt((data.find(x=>x.name===n.name)||{}).loyalty,10) || 0, 0, n.max)}));
+      save(npcs);
+      render();
+    }catch(err){
+      alert("Import failed: " + err.message);
+    }finally{
+      e.target.value = "";
+    }
+  });
+
+  // init
+  computePartyMax();
+  render();
+</script>
+</body>
+</html>
